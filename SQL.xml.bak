@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<ROOT>
+  <row>
+   <SQL_NAME>init_parameters</SQL_NAME>
+   <SQL_TEXT>select name,value from v$parameter where isdefault='FALSE'</SQL_TEXT>
+  </row>
+    <row>
+   <SQL_NAME>log_mode</SQL_NAME>
+   <SQL_TEXT>select log_mode from v$database</SQL_TEXT>
+  </row>
+    <row>
+   <SQL_NAME>db_profile</SQL_NAME>
+   <SQL_TEXT>select name,value from v$parameter where 
+       name like 'cluster%' or name like 'db_%name' or name = 'instance_name' 
+       or name = 'db_domain' or name = 'db_block_size' or name = 'pga_aggregate_target' 
+       or name = 'sga_target' or name = 'sga_max_size' or name like 'memory%'</SQL_TEXT>
+  </row>
+  <row>
+   <SQL_NAME>sysdate</SQL_NAME>
+   <SQL_TEXT>select to_char(sysdate,'YYYYMMDD HH24:MI:SS') as current_date from dual</SQL_TEXT>
+  </row>
+    <row>
+   <SQL_NAME>switch_times</SQL_NAME>
+   <SQL_TEXT>select count(*) switch_times from v$loghist t where t.first_time between trunc(sysdate-1) and trunc(sysdate)</SQL_TEXT>
+  </row>  
+    <row>
+   <SQL_NAME>sgainfo</SQL_NAME>
+   <SQL_TEXT>select * from v$sgainfo</SQL_TEXT>
+  </row>  
+    <row>
+   <SQL_NAME>db_total_size</SQL_NAME>
+   <SQL_TEXT>select sum(ts) total_size from (
+        select sum(bytes) ts from dba_data_files 
+        union all 
+        select sum(bytes) ts from dba_temp_files)</SQL_TEXT>
+  </row>
+    <row>
+   <SQL_NAME>datafile_count</SQL_NAME>
+   <SQL_TEXT>select count(*) datafile_count from v$datafile</SQL_TEXT>
+  </row>  
+    <row>
+   <SQL_NAME>tablespace_count</SQL_NAME>
+   <SQL_TEXT>select count(*) tablespace_count from v$tablespace</SQL_TEXT>
+  </row>  
+    <row>
+   <SQL_NAME>session_count</SQL_NAME>
+   <SQL_TEXT>select count(*) session_count from v$session</SQL_TEXT>
+  </row>  
+    <row>
+   <SQL_NAME>redo_log_size</SQL_NAME>
+   <SQL_TEXT>select sum(bytes)/count(*) redo_log_avg_size,max(bytes) max_size,min(bytes) min_size from v$log</SQL_TEXT>
+  </row>  
+    <row>
+   <SQL_NAME>control_files</SQL_NAME>
+   <SQL_TEXT>select name,status from v$controlfile</SQL_TEXT>
+  </row>  
+    <row>
+   <SQL_NAME>redo_log</SQL_NAME>
+   <SQL_TEXT>select group# as LOG_GROUP,thread# as LOG_THREAD,sequence# as LOG_SEQUENCE,bytes,members,status from v$log</SQL_TEXT>
+  </row>  
+    <row>
+   <SQL_NAME>redo_logfile</SQL_NAME>
+   <SQL_TEXT>select group# as LOG_GROUP,member,type from v$logfile</SQL_TEXT>
+  </row>            
+  <row>
+    <SQL_NAME>tablespace_capacity</SQL_NAME>
+    <SQL_TEXT>
+    select a.tablespace_name,
+           trunc(sum(a.tots) / 1024 / 1024, 2) Tot_Size_mb,
+           round(sum(a.sumb) / 1024 / 1024, 2) Tot_Free_mb,
+           round(sum(a.sumb) * 100 / sum(a.tots), 2) Pct_Free,
+           round(sum(a.largest) / 1024 / 1024, 2) Max_Free_mb,
+           sum(a.chunks) Chunks_Free
+      from (select tablespace_name,
+                   0 tots,
+                   sum(bytes) sumb,
+                   max(bytes) largest,
+                   count(*) chunks
+              from dba_free_space a
+             group by tablespace_name
+            union
+            select tablespace_name, sum(bytes) tots, 0, 0, 0
+              from dba_data_files
+             group by tablespace_name) a
+     group by a.tablespace_name
+    </SQL_TEXT>
+  </row>
+  <row>
+   <SQL_NAME>tablespace_SSM</SQL_NAME>
+   <SQL_TEXT>select TABLESPACE_NAME,SEGMENT_SPACE_MANAGEMENT from dba_tablespaces</SQL_TEXT>	
+  </row>
+  <row>
+  	<SQL_NAME>datafiles</SQL_NAME>
+  	<SQL_TEXT>select tablespace_name,
+       file_name,
+       trunc(bytes / 1024 / 1024) MB,
+       trunc(maxbytes / 1024 / 1024) maxMB,
+       AUTOEXTENSIBLE,
+       ONLINE_STATUS
+     from dba_data_files
+     order by tablespace_name
+    </SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>tempfiles</SQL_NAME>
+  	<SQL_TEXT>select TABLESPACE_NAME,
+  		 FILE_NAME,
+       trunc(bytes / 1024 / 1024) MB,
+       trunc(maxbytes / 1024 / 1024) MAXMB,
+       AUTOEXTENSIBLE,
+       STATUS
+  from dba_temp_files
+ order by tablespace_name
+   </SQL_TEXT> 
+  </row>	
+  <row>
+  	<SQL_NAME>undo</SQL_NAME>
+  	<SQL_TEXT>select name,value from v$parameter where name like 'undo_%'</SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>undostat</SQL_NAME>
+  	<SQL_TEXT>select max(UNDOBLKS) max_undoblks,
+       round(avg(UNDOBLKS),2) avg_undoblks,
+       max(maxquerylen) max_maxquerylen,
+       max(SSOLDERRCNT) max_ssolderrcnt
+  from v$undostat
+  </SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>online_undoseg</SQL_NAME>
+  	<SQL_TEXT>select count(SEGMENT_NAME) undoseg_count from dba_rollback_segs where status = 'ONLINE'</SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>non_online_undoseg</SQL_NAME>
+  	<SQL_TEXT>select segment_name,owner,tablespace_name,status from dba_rollback_segs where status &lt;&gt; 'ONLINE'</SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>user_profile</SQL_NAME>
+  	<SQL_TEXT>select USERNAME,
+       DEFAULT_TABLESPACE,
+       TEMPORARY_TABLESPACE,
+       granted_role,
+       PROFILE
+  from dba_users u, dba_role_privs r
+ where u.username = r.grantee
+   and username NOT IN
+       ('SYS', 'SYSTEM', 'MGMT_VIEW', 'DBSNMP', 'SYSMAN')
+   order by username
+   </SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>dba_users</SQL_NAME>
+  	<SQL_TEXT>select USERNAME, granted_role, ACCOUNT_STATUS
+  from dba_users u, dba_role_privs r
+ where u.username = r.grantee
+   and granted_role = 'DBA'
+   and username NOT IN ('SYS', 'SYSTEM')
+ order by username
+ </SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>dba_profiles</SQL_NAME>
+  	<SQL_TEXT>select * from DBA_PROFILES order by 1</SQL_TEXT>
+  </row>				
+  <row>
+  	<SQL_NAME>unusable_indexes</SQL_NAME>
+  	<SQL_TEXT>select owner,index_name,table_owner,table_name,status from dba_indexes where status='UNUSABLE'</SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>unusable_ind_partitions</SQL_NAME>
+  	<SQL_TEXT>select index_owner,index_name,partition_name,status from dba_ind_partitions where status='UNUSABLE'</SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>invalid_objects</SQL_NAME>
+  	<SQL_TEXT>select owner,
+       object_type,
+       count(1) object_count
+  from dba_objects
+ where status = 'INVALID'
+ group by owner, object_type
+ order by owner, object_type
+  		</SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>invalid_objects_detail</SQL_NAME>
+  	<SQL_TEXT>select owner,object_name,object_type,status from dba_objects where status ='INVALID' order by 1
+  		</SQL_TEXT>
+  </row>		
+  <row>
+  	<SQL_NAME>broken_job</SQL_NAME>
+  	<SQL_TEXT>select job,what,log_user,last_date,failures,broken from dba_jobs where broken='Y'</SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>resource_limit</SQL_NAME>
+  	<SQL_TEXT>select * from v$resource_limit</SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>db_version</SQL_NAME>
+  	<SQL_TEXT>select * from v$version</SQL_TEXT>
+  </row>
+  <row>
+  	<SQL_NAME>db_option</SQL_NAME>
+  	<SQL_TEXT>select * from v$option</SQL_TEXT>
+  </row>
+</ROOT>

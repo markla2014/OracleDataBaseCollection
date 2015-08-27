@@ -1,0 +1,226 @@
+import java.sql.*;
+import oracle.jdbc.*;
+import oracle.jdbc.pool.OracleDataSource;
+import java.io.*;
+
+import java.util.Enumeration;
+import java.util.Properties;
+import java.util.Date;
+import java.text.SimpleDateFormat;
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+
+import org.dom4j.Document;
+import org.dom4j.DocumentHelper;
+import org.dom4j.Element;
+import org.dom4j.DocumentException;
+import org.dom4j.io.OutputFormat;
+import org.dom4j.io.XMLWriter;
+import org.dom4j.io.SAXReader;
+
+
+class HCGatherData_R
+{
+  public static void main (String args[]) throws Exception
+  {
+    String jdbc_url = null;
+    String v_username = null;
+    String v_password = null;
+    String v_path = null;
+    //int v_interval = 2;
+    //int v_times =10;
+    
+    // 如果命令行参数没有给出，使用交互模式，提示用户输入参数
+    if (args.length < 1 ){
+      try{
+      BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
+      System.out.print("Please input JDBC URL(format:<hostname>:<port>:<sid>):");
+      jdbc_url = in.readLine();
+      System.out.print("Please input username:");
+      v_username = in.readLine();
+      System.out.print("Please input password:");
+      v_password = in.readLine();
+      System.out.print("Please input output directory:");
+      v_path = in.readLine();
+      System.out.print("\n");          
+      }catch(Exception e){e.printStackTrace();} 
+     } else if (args.length < 4){  //如果参数个数不足，打印用法，退出程序
+    System.out.println("usage: java HCGatherData <hostname>:<port>:<sid> <username> <password> <output_parent_dir>");
+    System.exit(0);    
+    }else {
+    	jdbc_url = args[0];
+    	v_username = args[1];
+    	v_password = args[2];
+    	v_path = args[3];
+    //	v_interval = Integer.parseInt(args[4]);
+    //	v_times = Integer.parseInt(args[5]);    	
+    }
+    
+            
+    OracleDataSource ods = new OracleDataSource();
+    
+    java.util.Properties prop = new java.util.Properties();
+
+    prop.put("user", v_username);
+    prop.put("password", v_password);
+        
+    //如果是sys用户，指定连接的ROLE
+    if (v_username.toUpperCase().equals("SYS")){
+    	prop.put("internal_logon", "SYSDBA");
+    	}
+    
+    ods.setConnectionProperties(prop);
+    
+    ods.setURL("jdbc:oracle:thin:@"+jdbc_url);
+    Connection conn = ods.getConnection();
+    System.out.println("Connect OK!");
+    
+    // Create Oracle DatabaseMetaData object
+    DatabaseMetaData meta = conn.getMetaData();
+
+    // gets driver info:
+    System.out.println("JDBC driver version is " + meta.getDriverVersion());
+                
+    //取系统时间
+    
+    SimpleDateFormat df = new SimpleDateFormat("yyyyMMddHHmmss");  //设置日期格式
+    String dd =df.format(new Date());  // new Date()为获取当前系统时间   
+    String v_instance_name = null;
+    String v_host_name = null;
+    
+    //取主机名和实例名
+    Statement stmt = conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE,ResultSet.CONCUR_READ_ONLY);
+    ResultSet rset = stmt.executeQuery("select instance_name,host_name from v$instance"); 
+    while (rset.next()) {     
+                v_instance_name = rset.getString(1);  
+                v_host_name = rset.getString(2);   
+            }
+    rset.close();
+    stmt.close();
+    
+    String v_dir_name = v_host_name+"_"+v_instance_name+"_"+dd;
+    System.out.println("Output directory is "+v_dir_name);   
+         
+    
+    File f = new File(v_path+File.separator+v_dir_name) ;// 实例化File类的对象		
+    if (f.mkdir()) { ;	// 创建文件夹
+    System.out.println("Create output directory OK!");
+    } else {
+    System.out.println("Create output directory fail!");
+    System.exit(0);
+    }	
+    
+    String[] parameter_string = new String[3];
+    
+    parameter_string[2] = v_path +File.separator+v_dir_name; 
+    
+    System.out.println("Full output directory is "+ parameter_string[2]);
+    
+   
+    
+    //取数据库信息            
+    try{
+    	        
+       //从SQL.xml文件取SQL语句并执行
+       
+       SAXReader saxReaderSql = new SAXReader();
+       Document documentSql = saxReaderSql.read("SQL.xml");
+       
+       Element sqlroot = documentSql.getRootElement();
+              
+       // iterate through child elements of root
+        for ( Iterator i = sqlroot.elementIterator(); i.hasNext(); ) {
+            Element row = (Element) i.next();
+            
+            parameter_string[0] = row.element("SQL_TEXT").getText();
+            parameter_string[1] = row.element("SQL_NAME").getText();
+            get_result(conn,parameter_string);
+          }
+       
+    }catch(Exception e){e.printStackTrace();} 
+     
+    conn.close();
+    
+  
+    ZipUtils.createZip(v_path+File.separator+v_dir_name, v_path+File.separator+v_dir_name+".zip");
+    
+      System.out.print("\n"); 
+      System.out.println("Compress data OK!");
+      System.out.print("\n");  
+      System.out.println("Gather data completed!");
+    
+   }
+   
+    
+   public static void get_result (Connection arg_conn,String[] parameter_string) throws Exception {  
+    
+    Statement stmt = arg_conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE,ResultSet.CONCUR_READ_ONLY);
+                
+    System.out.println("\nExecuting query: " + parameter_string[0]);
+    System.out.print("\n");
+    
+    ResultSet rset = stmt.executeQuery(parameter_string[0]); 
+    ResultSetMetaData rsmd = rset.getMetaData();
+    
+    String v_name = null;
+    String v_value = null;
+    
+    int colCount = rsmd.getColumnCount();
+    
+             	
+    Document document = DocumentHelper.createDocument();
+    Element root = document.addElement(parameter_string[1]);
+    
+    
+    
+    //取结果集，并按XML格式输出 
+    if (!rset.next()){
+       	Element v_row = root.addElement("row");
+       	v_row.addText("##null##");
+      }else {
+      
+       	do 
+     {     
+                                    
+            Element v_row = root.addElement("row");
+            for (int i = 1; i <= colCount; i++)
+            {
+                String columnName = rsmd.getColumnName(i);
+                String columnTypeName = rsmd.getColumnTypeName(i);
+                String columnSize = rsmd.getPrecision(i)+"";
+                System.out.println(columnName+"||"+columnTypeName+"||"+columnSize);
+                Object o_value      = rset.getObject(i);  
+                Element node  = v_row.addElement(columnName);
+                if (o_value == null){o_value="";};
+                node.addText(o_value.toString());
+                if (System.getenv("HTHC_OUTPUT")!=null) {
+                System.out.print("\""+o_value.toString()+"\""+",");   
+              }  
+            }
+            if (System.getenv("HTHC_OUTPUT")!=null) {
+            System.out.print("\n");    
+          }
+       }while (rset.next());
+     }     
+            
+     
+       //写XML文件
+       try{       
+            OutputFormat format = new OutputFormat("  ", true);
+            format.setEncoding("GBK");
+            FileWriter fileout = new FileWriter(parameter_string[2]+File.separator+parameter_string[1]+".xml");
+            XMLWriter writer = new XMLWriter(fileout, format);
+            writer.write(document);
+            fileout.close();
+          }catch(Exception e){   
+          e.printStackTrace();
+          }
+       	    
+    rset.close();
+    stmt.close();
+    
+   }
+}
